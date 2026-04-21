@@ -16,7 +16,7 @@ export default function ConnectPlatform({ platform, onConnected }: Props) {
 
   async function handleConnect() {
     if (isSpotify) {
-      await spotifyService.initiateAuth();
+      await spotifyService.authenticate(); // SDK redirects to Spotify
     } else {
       try {
         if (!appleMusicService.isConfigured()) {

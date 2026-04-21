@@ -21,58 +21,56 @@ export default function App() {
   const [spotifyUser, setSpotifyUser] = useState('');
   const [lastConfig, setLastConfig] = useState<PlaylistConfig | null>(null);
 
-  // ── Handle Spotify OAuth callback ──────────────────────────────────────────
+  // ── On load: handle OAuth callback OR restore existing session ─────────────
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get('code');
-    const errorParam = params.get('error');
+    async function init() {
+      const params = new URLSearchParams(window.location.search);
 
-    if (errorParam) {
-      setError(`Spotify auth denied: ${errorParam}`);
-      window.history.replaceState({}, '', '/');
-      setAppState('connect');
-      return;
-    }
-
-    if (code) {
-      window.history.replaceState({}, '', '/');
-      spotifyService.exchangeCode(code).then(async () => {
-        const token = await spotifyService.getValidToken();
-        if (token) {
-          const user = await spotifyService.getCurrentUser(token).catch(() => null);
-          if (user) setSpotifyUser(user.display_name);
+      // Spotify redirected back with auth code — SDK handles the exchange
+      if (params.has('code') || params.has('error')) {
+        if (params.has('error')) {
+          setError(`Spotify auth denied: ${params.get('error')}`);
+          window.history.replaceState({}, '', '/');
+          setAppState('select-platform');
+          return;
         }
-        setPlatform('spotify');
-        setAppState('build');
-      }).catch(err => {
-        setError(err instanceof Error ? err.message : 'Spotify auth failed');
-        setAppState('connect');
-      });
-      return;
-    }
-
-    // Restore existing Spotify session
-    const tokens = spotifyService.getStoredTokens();
-    if (tokens) {
-      spotifyService.getValidToken().then(async token => {
-        if (token) {
-          const user = await spotifyService.getCurrentUser(token).catch(() => null);
-          if (user) setSpotifyUser(user.display_name);
-          setPlatform('spotify');
-          setAppState('build');
-        } else {
+        try {
+          const ok = await spotifyService.authenticate();
+          window.history.replaceState({}, '', '/');
+          if (ok) {
+            const user = await spotifyService.getCurrentUser().catch(() => null);
+            if (user) setSpotifyUser(user.display_name);
+            setPlatform('spotify');
+            setAppState('build');
+          } else {
+            setAppState('select-platform');
+          }
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Spotify auth failed');
+          window.history.replaceState({}, '', '/');
           setAppState('select-platform');
         }
-      });
-      return;
+        return;
+      }
+
+      // Check for existing Spotify session
+      const alreadyAuthed = await spotifyService.isAuthenticated();
+      if (alreadyAuthed) {
+        const user = await spotifyService.getCurrentUser().catch(() => null);
+        if (user) setSpotifyUser(user.display_name);
+        setPlatform('spotify');
+        setAppState('build');
+        return;
+      }
+
+      // Check for Apple Music session
+      if (appleMusicService.isAuthorized()) {
+        setPlatform('apple-music');
+        setAppState('build');
+      }
     }
 
-    // Check Apple Music session
-    if (appleMusicService.isAuthorized()) {
-      setPlatform('apple-music');
-      setAppState('build');
-      return;
-    }
+    init();
   }, []);
 
   // ── Platform selection ──────────────────────────────────────────────────────
@@ -81,7 +79,11 @@ export default function App() {
     setAppState('connect');
   }
 
-  function handleConnected() {
+  async function handleConnected() {
+    if (platform === 'spotify') {
+      const user = await spotifyService.getCurrentUser().catch(() => null);
+      if (user) setSpotifyUser(user.display_name);
+    }
     setAppState('build');
   }
 
@@ -102,14 +104,9 @@ export default function App() {
     setError('');
     setLastConfig(config);
     try {
-      let result: GeneratedPlaylist;
-      if (config.platform === 'spotify') {
-        const token = await spotifyService.getValidToken();
-        if (!token) throw new Error('Not connected to Spotify');
-        result = await buildSpotifyPlaylist(config, token, setProgress);
-      } else {
-        result = await buildAppleMusicPlaylist(config, setProgress);
-      }
+      const result = config.platform === 'spotify'
+        ? await buildSpotifyPlaylist(config, setProgress)
+        : await buildAppleMusicPlaylist(config, setProgress);
       setPlaylist(result);
       setAppState('result');
     } catch (err) {
@@ -122,11 +119,6 @@ export default function App() {
 
   function handleRegenerate() {
     if (lastConfig) generate(lastConfig);
-  }
-
-  function handleBackToForm() {
-    setPlaylist(null);
-    setAppState('build');
   }
 
   // ── Render ──────────────────────────────────────────────────────────────────
@@ -148,7 +140,6 @@ export default function App() {
             </div>
 
             <div className="grid sm:grid-cols-2 gap-4 w-full max-w-lg">
-              {/* Spotify card */}
               <button
                 onClick={() => selectPlatform('spotify')}
                 className="flex flex-col items-center gap-3 p-6 rounded-2xl border border-spin-border bg-spin-card hover:border-[#1DB954]/50 hover:bg-[#1DB954]/5 transition-all group"
@@ -164,7 +155,6 @@ export default function App() {
                 </div>
               </button>
 
-              {/* Apple Music card */}
               <button
                 onClick={() => selectPlatform('apple-music')}
                 className="flex flex-col items-center gap-3 p-6 rounded-2xl border border-spin-border bg-spin-card hover:border-pink-500/50 hover:bg-pink-500/5 transition-all group"
@@ -181,7 +171,6 @@ export default function App() {
               </button>
             </div>
 
-            {/* Spin class info strip */}
             <div className="w-full max-w-2xl grid grid-cols-3 gap-3">
               {[
                 { icon: '⛰️', label: 'Climbs', bpm: '60–75 BPM' },
@@ -211,10 +200,9 @@ export default function App() {
           </div>
         )}
 
-        {/* Builder + result layout */}
+        {/* Builder + result */}
         {(appState === 'build' || appState === 'result') && (
           <div className="grid lg:grid-cols-[380px,1fr] gap-6 items-start">
-            {/* Left: Form panel */}
             <div className="bg-spin-card border border-spin-border rounded-2xl p-5 lg:sticky lg:top-24">
               <PlaylistForm
                 platform={platform}
@@ -225,7 +213,6 @@ export default function App() {
               />
             </div>
 
-            {/* Right: Result / loading / empty state */}
             <div className="bg-spin-card border border-spin-border rounded-2xl p-5 min-h-[400px]">
               {isGenerating && <LoadingOverlay message={progress} />}
 
@@ -256,20 +243,11 @@ export default function App() {
                       Configure your class options and hit <strong className="text-gray-400">Generate Playlist</strong>
                     </p>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 text-xs text-gray-600 max-w-xs">
-                    <div className="bg-spin-border rounded-lg p-2">Warm Up → Build → Peak</div>
-                    <div className="bg-spin-border rounded-lg p-2">Charts + Search combined</div>
-                    <div className="bg-spin-border rounded-lg p-2">BPM-matched segments</div>
-                    <div className="bg-spin-border rounded-lg p-2">Saves to your library</div>
-                  </div>
                 </div>
               )}
 
               {!isGenerating && !error && playlist && (
-                <PlaylistDisplay
-                  playlist={playlist}
-                  onRegenerate={handleRegenerate}
-                />
+                <PlaylistDisplay playlist={playlist} onRegenerate={handleRegenerate} />
               )}
             </div>
           </div>

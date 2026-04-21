@@ -5,23 +5,18 @@ import type {
   Track,
   SegmentType,
   BPMRange,
-  SpotifyTrack,
-  SpotifyAudioFeatures,
 } from '../types';
 import * as spotify from './spotify';
+import type { Track as SpotifySDKTrack, AudioFeatures } from './spotify';
 import * as appleMusic from './appleMusic';
 
 // ─── Spin class structure ─────────────────────────────────────────────────────
 
 interface SegmentDef {
   type: SegmentType;
-  count: number; // number of tracks for this segment
+  count: number;
 }
 
-/**
- * Returns the ordered list of segment types and track counts for a class.
- * Mirrors the studio template: Warm Up → Flat → Climb → Sprint → Jog → Climb → Flat → Jump
- */
 function getClassStructure(durationMinutes: number, coolDown: boolean): SegmentDef[] {
   const structures: Record<number, SegmentDef[]> = {
     30: [
@@ -55,107 +50,59 @@ function getClassStructure(durationMinutes: number, coolDown: boolean): SegmentD
       { type: 'jump',     count: 3 },
     ],
   };
-
   const base = structures[durationMinutes] ?? structures[45];
   if (coolDown) base.push({ type: 'cooldown', count: 2 });
   return base;
 }
 
-/**
- * Derives BPM target ranges for each segment type from the user-selected BPM.
- *
- * Spin guidelines:
- *   Climbs      60–75 BPM
- *   Endurance   80–95 BPM
- *   Sprints     100–120 BPM
- *
- * We anchor these ranges relative to the selected BPM so they scale naturally.
- */
 function segmentBpmRange(type: SegmentType, selected: number): BPMRange {
   switch (type) {
-    case 'warmup':
-      return { min: Math.max(50, selected - 15), max: selected + 10 };
-    case 'flat':
-      return { min: Math.max(60, selected - 5),  max: selected + 20 };
-    case 'climb':
-      return { min: Math.max(45, selected - 40), max: Math.max(75, selected - 5) };
-    case 'sprint':
-      return { min: Math.min(selected + 10, 100), max: Math.min(selected + 45, 145) };
-    case 'recovery':
-      return { min: Math.max(55, selected - 25), max: selected + 5 };
-    case 'jump':
-      return { min: Math.max(65, selected - 10), max: selected + 20 };
-    case 'cooldown':
-      return { min: Math.max(35, selected - 60), max: Math.max(65, selected - 20) };
-    default:
-      return { min: selected - 15, max: selected + 15 };
+    case 'warmup':   return { min: Math.max(50, selected - 15), max: selected + 10 };
+    case 'flat':     return { min: Math.max(60, selected - 5),  max: selected + 20 };
+    case 'climb':    return { min: Math.max(45, selected - 40), max: Math.max(75, selected - 5) };
+    case 'sprint':   return { min: Math.min(selected + 10, 100), max: Math.min(selected + 45, 145) };
+    case 'recovery': return { min: Math.max(55, selected - 25), max: selected + 5 };
+    case 'jump':     return { min: Math.max(65, selected - 10), max: selected + 20 };
+    case 'cooldown': return { min: Math.max(35, selected - 60), max: Math.max(65, selected - 20) };
+    default:         return { min: selected - 15, max: selected + 15 };
   }
 }
 
-// ─── Track pool construction ──────────────────────────────────────────────────
+// ─── Track pool ───────────────────────────────────────────────────────────────
 
-interface PoolTrack extends SpotifyTrack {
-  bpm: number;          // actual or heuristic
+interface PoolTrack {
+  id: string;
+  name: string;
+  uri: string;
+  duration_ms: number;
+  artists: Array<{ name: string }>;
+  album: { name: string; images: Array<{ url: string }> };
+  preview_url?: string | null;
+  popularity?: number;
+  bpm: number;
   appearanceCount: number;
 }
 
-function inRange(bpm: number, range: BPMRange): boolean {
+function inRange(bpm: number, range: BPMRange) {
   return bpm >= range.min && bpm <= range.max;
 }
 
-function closestToMid(tracks: PoolTrack[], range: BPMRange): PoolTrack[] {
-  const mid = (range.min + range.max) / 2;
-  return [...tracks].sort((a, b) => Math.abs(a.bpm - mid) - Math.abs(b.bpm - mid));
-}
-
-/**
- * Heuristic: distribute a list of tracks across the genre's BPM range
- * based on position in the list (earlier = more popular = higher chart rank).
- * Popularity rank acts as a proxy for energy when audio features are unavailable.
- */
-function assignHeuristicBpms(
-  tracks: SpotifyTrack[],
-  genre: string,
-): PoolTrack[] {
-  const profile = spotify.GENRE_BPM_PROFILE[genre] ?? { typical: 110, range: [80, 140] as [number, number] };
-  const [lo, hi] = profile.range;
-  const spread = hi - lo;
-
-  return tracks.map((t, i) => {
-    // Distribute BPMs: high-popularity (top of chart) ≈ profile.typical ± small delta
-    // lower popularity ≈ spread across the range
-    const fraction = i / Math.max(tracks.length - 1, 1);
-    // oscillate around typical to simulate variety
-    const bpm = lo + spread * (0.5 + 0.4 * Math.sin(i * 1.3 + 1));
-    return { ...t, bpm: Math.round(Math.max(lo, Math.min(hi, bpm + (fraction - 0.5) * spread * 0.3))), appearanceCount: 1 };
-  });
-}
-
-function pickTracks(
-  pool: PoolTrack[],
-  range: BPMRange,
-  count: number,
-  used: Set<string>,
-): PoolTrack[] {
-  // Prefer in-range, sorted by (appearanceCount DESC, popularity DESC)
+function pickTracks(pool: PoolTrack[], range: BPMRange, count: number, used: Set<string>): PoolTrack[] {
   let available = pool
     .filter(t => !used.has(t.id) && inRange(t.bpm, range))
     .sort((a, b) => b.appearanceCount - a.appearanceCount || (b.popularity ?? 0) - (a.popularity ?? 0));
 
-  // Expand range if not enough
   if (available.length < count) {
-    const wider = { min: range.min - 15, max: range.max + 15 };
     available = pool
-      .filter(t => !used.has(t.id) && inRange(t.bpm, wider))
+      .filter(t => !used.has(t.id) && inRange(t.bpm, { min: range.min - 15, max: range.max + 15 }))
       .sort((a, b) => b.appearanceCount - a.appearanceCount || (b.popularity ?? 0) - (a.popularity ?? 0));
   }
 
-  // Final fallback: closest BPM match regardless of range
   if (available.length < count) {
-    available = closestToMid(
-      pool.filter(t => !used.has(t.id)),
-      range,
-    );
+    const mid = (range.min + range.max) / 2;
+    available = [...pool]
+      .filter(t => !used.has(t.id))
+      .sort((a, b) => Math.abs(a.bpm - mid) - Math.abs(b.bpm - mid));
   }
 
   const selected = available.slice(0, count);
@@ -180,27 +127,41 @@ function poolTrackToTrack(t: PoolTrack, type: SegmentType): Track {
   };
 }
 
-// ─── Duration adjustment ──────────────────────────────────────────────────────
+function sdkTrackToPool(t: SpotifySDKTrack, bpm: number, appearanceCount: number): PoolTrack {
+  return {
+    id: t.id,
+    name: t.name,
+    uri: t.uri,
+    duration_ms: t.duration_ms,
+    artists: t.artists,
+    album: { name: t.album.name, images: t.album.images },
+    preview_url: t.preview_url,
+    popularity: t.popularity,
+    bpm,
+    appearanceCount,
+  };
+}
 
-const AVG_SONG_MS = 3.5 * 60_000;
+function assignHeuristicBpms(tracks: SpotifySDKTrack[], genre: string, countMap: Map<string, number>): PoolTrack[] {
+  const profile = spotify.GENRE_BPM_PROFILE[genre] ?? { typical: 110, range: [80, 140] as [number, number] };
+  const [lo, hi] = profile.range;
+  const spread = hi - lo;
+  return tracks.map((t, i) => {
+    const bpm = Math.round(Math.max(lo, Math.min(hi, lo + spread * (0.5 + 0.4 * Math.sin(i * 1.3 + 1)))));
+    return sdkTrackToPool(t, bpm, countMap.get(t.id) ?? 1);
+  });
+}
 
-/**
- * After initial assembly, try to bring total within ±2 min of the target by
- * adding/removing songs from the most flexible segments (flat, jump, recovery).
- */
 function adjustDuration(
   segments: Segment[],
   targetMs: number,
   pool: PoolTrack[],
   used: Set<string>,
-  selectedBpm: number,
 ): void {
   const tolerance = 2 * 60_000;
   const totalMs = () => segments.reduce((s, seg) => s + seg.tracks.reduce((ss, t) => ss + t.durationMs, 0), 0);
-
   const expandable: SegmentType[] = ['flat', 'jump', 'recovery'];
 
-  // Add tracks if too short
   while (totalMs() < targetMs - tolerance) {
     let added = false;
     for (const type of expandable) {
@@ -213,10 +174,9 @@ function adjustDuration(
         if (totalMs() >= targetMs - tolerance) break;
       }
     }
-    if (!added) break; // no more tracks to add
+    if (!added) break;
   }
 
-  // Remove tracks if too long (don't leave a segment empty)
   while (totalMs() > targetMs + tolerance) {
     let removed = false;
     for (const type of [...expandable].reverse()) {
@@ -229,58 +189,44 @@ function adjustDuration(
     }
     if (!removed) break;
   }
-
-  void selectedBpm; // kept for possible future use
 }
 
 // ─── Spotify playlist builder ─────────────────────────────────────────────────
 
 export async function buildSpotifyPlaylist(
   config: PlaylistConfig,
-  token: string,
   onProgress?: (msg: string) => void,
 ): Promise<GeneratedPlaylist> {
   const { bpm: selectedBpm, genre, decade, durationMinutes, coolDown } = config;
 
   onProgress?.('Scanning top charts…');
   const [chartTracks, searchedTracks] = await Promise.all([
-    spotify.getTopChartTracks(token, genre),
-    spotify.searchTracks(token, genre, decade),
+    spotify.getTopChartTracks(genre),
+    spotify.searchTracks(genre, decade),
   ]);
 
-  // Count appearances for chart priority
   const countMap = new Map<string, number>();
-  const countAll = (arr: SpotifyTrack[]) => arr.forEach(t => countMap.set(t.id, (countMap.get(t.id) ?? 0) + 1));
+  const countAll = (arr: SpotifySDKTrack[]) =>
+    arr.forEach(t => countMap.set(t.id, (countMap.get(t.id) ?? 0) + 1));
   countAll(chartTracks);
   countAll(searchedTracks);
 
-  // Deduplicate
-  const allMap = new Map<string, SpotifyTrack>();
+  const allMap = new Map<string, SpotifySDKTrack>();
   [...chartTracks, ...searchedTracks].forEach(t => { if (!allMap.has(t.id)) allMap.set(t.id, t); });
   const allTracks = Array.from(allMap.values());
 
   onProgress?.('Analyzing BPMs…');
-  let poolTracks: PoolTrack[];
+  const features = await spotify.getAudioFeatures(allTracks.map(t => t.id));
 
-  const features = await spotify.getAudioFeatures(token, allTracks.map(t => t.id));
-
+  let pool: PoolTrack[];
   if (features.length > 0) {
-    // Audio features available — use real BPMs
-    const featMap = new Map<string, SpotifyAudioFeatures>(features.map(f => [f.id, f]));
-    poolTracks = allTracks
+    const featMap = new Map<string, AudioFeatures>(features.map(f => [f.id, f]));
+    pool = allTracks
       .filter(t => featMap.has(t.id))
-      .map(t => ({
-        ...t,
-        bpm: Math.round(featMap.get(t.id)!.tempo),
-        appearanceCount: countMap.get(t.id) ?? 1,
-      }));
+      .map(t => sdkTrackToPool(t, Math.round(featMap.get(t.id)!.tempo), countMap.get(t.id) ?? 1));
   } else {
-    // Fallback: heuristic BPM distribution
-    onProgress?.('BPM analysis unavailable — using genre profile…');
-    poolTracks = assignHeuristicBpms(allTracks, genre).map(t => ({
-      ...t,
-      appearanceCount: countMap.get(t.id) ?? 1,
-    }));
+    onProgress?.('Using genre BPM profile…');
+    pool = assignHeuristicBpms(allTracks, genre, countMap);
   }
 
   onProgress?.('Building spin class structure…');
@@ -290,23 +236,18 @@ export async function buildSpotifyPlaylist(
 
   for (const { type, count } of structure) {
     const bpmRange = segmentBpmRange(type, selectedBpm);
-    const picked = pickTracks(poolTracks, bpmRange, count, used);
-    segments.push({
-      type,
-      bpmRange,
-      tracks: picked.map(t => poolTrackToTrack(t, type)),
-    });
+    const picked = pickTracks(pool, bpmRange, count, used);
+    segments.push({ type, bpmRange, tracks: picked.map(t => poolTrackToTrack(t, type)) });
   }
 
   onProgress?.('Fine-tuning playlist length…');
-  adjustDuration(segments, durationMinutes * 60_000, poolTracks, used, selectedBpm);
+  adjustDuration(segments, durationMinutes * 60_000, pool, used);
 
-  const totalDurationMs = segments.reduce(
-    (sum, seg) => sum + seg.tracks.reduce((s, t) => s + t.durationMs, 0),
-    0,
-  );
-
-  return { segments, totalDurationMs, config };
+  return {
+    segments,
+    totalDurationMs: segments.reduce((s, seg) => s + seg.tracks.reduce((ss, t) => ss + t.durationMs, 0), 0),
+    config,
+  };
 }
 
 // ─── Apple Music playlist builder ─────────────────────────────────────────────
@@ -323,7 +264,6 @@ export async function buildAppleMusicPlaylist(
     appleMusic.searchTracks(`${genre}${decade ? ' ' + decade : ''} music`, 50),
   ]);
 
-  // Deduplicate
   const allMap = new Map<string, appleMusic.AppleTrackRaw>();
   [...chartTracks, ...searchedTracks].forEach(t => { if (!allMap.has(t.id)) allMap.set(t.id, t); });
 
@@ -331,23 +271,19 @@ export async function buildAppleMusicPlaylist(
   const [lo, hi] = profile.range;
   const spread = hi - lo;
 
-  const poolTracks: PoolTrack[] = Array.from(allMap.values()).map((t, i) => {
-    const bpm = t.bpmEstimate
-      ? Math.round(t.bpmEstimate)
-      : Math.round(lo + spread * (0.5 + 0.4 * Math.sin(i * 1.3 + 1)));
-    return {
-      id: t.id,
-      name: t.name,
-      uri: t.uri,
-      duration_ms: t.durationMs,
-      artists: [{ name: t.artist }],
-      album: { name: t.album, images: t.imageUrl ? [{ url: t.imageUrl, width: 300, height: 300 }] : [] },
-      preview_url: t.previewUrl,
-      popularity: t.popularity,
-      bpm,
-      appearanceCount: chartTracks.find(c => c.id === t.id) ? 2 : 1,
-    };
-  });
+  const pool: PoolTrack[] = Array.from(allMap.values()).map((t, i) => ({
+    id: t.id,
+    name: t.name,
+    uri: t.uri,
+    duration_ms: t.durationMs,
+    artists: [{ name: t.artist }],
+    album: { name: t.album, images: t.imageUrl ? [{ url: t.imageUrl }] : [] },
+    preview_url: t.previewUrl,
+    popularity: t.popularity,
+    bpm: t.bpmEstimate ? Math.round(t.bpmEstimate)
+      : Math.round(lo + spread * (0.5 + 0.4 * Math.sin(i * 1.3 + 1))),
+    appearanceCount: chartTracks.find(c => c.id === t.id) ? 2 : 1,
+  }));
 
   onProgress?.('Building spin class structure…');
   const structure = getClassStructure(durationMinutes, coolDown);
@@ -356,16 +292,15 @@ export async function buildAppleMusicPlaylist(
 
   for (const { type, count } of structure) {
     const bpmRange = segmentBpmRange(type, selectedBpm);
-    const picked = pickTracks(poolTracks, bpmRange, count, used);
+    const picked = pickTracks(pool, bpmRange, count, used);
     segments.push({ type, bpmRange, tracks: picked.map(t => poolTrackToTrack(t, type)) });
   }
 
-  adjustDuration(segments, durationMinutes * 60_000, poolTracks, used, selectedBpm);
+  adjustDuration(segments, durationMinutes * 60_000, pool, used);
 
-  const totalDurationMs = segments.reduce(
-    (sum, seg) => sum + seg.tracks.reduce((s, t) => s + t.durationMs, 0),
-    0,
-  );
-
-  return { segments, totalDurationMs, config };
+  return {
+    segments,
+    totalDurationMs: segments.reduce((s, seg) => s + seg.tracks.reduce((ss, t) => ss + t.durationMs, 0), 0),
+    config,
+  };
 }

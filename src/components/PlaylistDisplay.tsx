@@ -40,15 +40,11 @@ export default function PlaylistDisplay({ playlist, onRegenerate }: Props) {
 
     try {
       if (isSpotify) {
-        const token = await spotifyService.getValidToken();
-        if (!token) throw new Error('Not connected to Spotify');
-        const user = await spotifyService.getCurrentUser(token);
-        const pl = await spotifyService.createPlaylist(token, user.id, playlistName, description);
-        const uris = allTracks.map(t => t.uri);
-        await spotifyService.addTracksToPlaylist(token, pl.id, uris);
+        const user = await spotifyService.getCurrentUser();
+        const pl = await spotifyService.createPlaylist(user.id, playlistName, description);
+        await spotifyService.addTracksToPlaylist(pl.id, allTracks.map(t => t.uri));
       } else {
-        const trackIds = allTracks.map(t => t.id);
-        await appleMusicService.savePlaylist(playlistName, trackIds);
+        await appleMusicService.savePlaylist(playlistName, allTracks.map(t => t.id));
       }
       setSaveState('saved');
     } catch (err) {
