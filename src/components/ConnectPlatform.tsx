@@ -1,5 +1,7 @@
-import { ExternalLink, Music, AlertCircle } from 'lucide-react';
+import { useState } from 'react';
+import { ExternalLink, Music, AlertCircle, Copy, Check } from 'lucide-react';
 import * as spotifyService from '../services/spotify';
+import { REDIRECT_URI } from '../services/spotify';
 import * as appleMusicService from '../services/appleMusic';
 import type { Platform } from '../types';
 
@@ -10,17 +12,10 @@ interface Props {
 
 export default function ConnectPlatform({ platform, onConnected }: Props) {
   const isSpotify = platform === 'spotify';
+  const [copied, setCopied] = useState(false);
 
   async function handleConnect() {
     if (isSpotify) {
-      if (!spotifyService.isConfigured()) {
-        alert(
-          'Spotify Client ID is not configured.\n\n' +
-          'Create a .env file with VITE_SPOTIFY_CLIENT_ID=your_id.\n' +
-          'See .env.example for details.',
-        );
-        return;
-      }
       await spotifyService.initiateAuth();
     } else {
       try {
@@ -38,6 +33,12 @@ export default function ConnectPlatform({ platform, onConnected }: Props) {
         alert(`Apple Music connection failed: ${err instanceof Error ? err.message : String(err)}`);
       }
     }
+  }
+
+  function handleCopy() {
+    navigator.clipboard.writeText(REDIRECT_URI);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   }
 
   return (
@@ -61,6 +62,34 @@ export default function ConnectPlatform({ platform, onConnected }: Props) {
         </p>
       </div>
 
+      {/* Redirect URI display for Spotify */}
+      {isSpotify && (
+        <div className="w-full max-w-sm bg-spin-border rounded-xl p-3 flex flex-col gap-2">
+          <p className="text-xs text-gray-400">
+            Make sure this exact URI is saved in your{' '}
+            <a
+              href="https://developer.spotify.com/dashboard"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-spin-accent-light underline"
+            >
+              Spotify Dashboard
+            </a>
+            {' '}→ Settings → Redirect URIs:
+          </p>
+          <div className="flex items-center gap-2 bg-spin-bg rounded-lg px-3 py-2">
+            <code className="text-xs text-green-400 flex-1 font-mono break-all">{REDIRECT_URI}</code>
+            <button
+              onClick={handleCopy}
+              className="shrink-0 text-gray-400 hover:text-white transition-colors"
+              title="Copy to clipboard"
+            >
+              {copied ? <Check size={14} className="text-green-400" /> : <Copy size={14} />}
+            </button>
+          </div>
+        </div>
+      )}
+
       <button
         onClick={handleConnect}
         className={`flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm transition-all ${
@@ -73,12 +102,12 @@ export default function ConnectPlatform({ platform, onConnected }: Props) {
         <ExternalLink size={14} />
       </button>
 
-      {!spotifyService.isConfigured() && isSpotify && (
-        <div className="flex items-start gap-2 bg-amber-500/10 border border-amber-500/30 rounded-xl p-3 max-w-sm">
-          <AlertCircle size={16} className="text-amber-400 mt-0.5 shrink-0" />
-          <p className="text-amber-300 text-xs">
-            Add your Spotify Client ID to a <code className="font-mono bg-white/10 px-1 rounded">.env</code> file.
-            {' '}See <code className="font-mono bg-white/10 px-1 rounded">.env.example</code> for setup instructions.
+      {isSpotify && (
+        <div className="flex items-start gap-2 bg-blue-500/10 border border-blue-500/30 rounded-xl p-3 max-w-sm">
+          <AlertCircle size={16} className="text-blue-400 mt-0.5 shrink-0" />
+          <p className="text-blue-300 text-xs">
+            After adding the redirect URI in Spotify, click your browser's{' '}
+            <strong>Advanced → Proceed to localhost</strong> if you see a security warning.
           </p>
         </div>
       )}

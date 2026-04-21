@@ -1,7 +1,7 @@
 import type { SpotifyTokens, SpotifyTrack, SpotifyAudioFeatures, SpotifyUser, GenreOption } from '../types';
 
 const CLIENT_ID = import.meta.env.VITE_SPOTIFY_CLIENT_ID as string | undefined ?? '2a82a87ad0d74e61b4fc554ddabbfae6';
-const REDIRECT_URI = import.meta.env.VITE_SPOTIFY_REDIRECT_URI as string | undefined ?? 'https://localhost:5173/callback';
+export const REDIRECT_URI = import.meta.env.VITE_SPOTIFY_REDIRECT_URI as string | undefined ?? 'https://localhost:5173/callback';
 
 const SCOPES = [
   'playlist-modify-public',
