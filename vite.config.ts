@@ -19,8 +19,10 @@ if (!fs.existsSync(keyPath) || !fs.existsSync(certPath)) {
   }
 }
 
+// Set NO_HTTPS=1 to serve plain HTTP (e.g. for cloud previews).
+// Default is HTTPS, which Spotify OAuth requires for localhost redirects.
 const httpsOptions =
-  fs.existsSync(keyPath) && fs.existsSync(certPath)
+  !process.env.NO_HTTPS && fs.existsSync(keyPath) && fs.existsSync(certPath)
     ? { key: fs.readFileSync(keyPath), cert: fs.readFileSync(certPath) }
     : undefined;
 
