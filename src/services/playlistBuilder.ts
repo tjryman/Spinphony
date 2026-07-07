@@ -262,6 +262,12 @@ export async function buildDeezerPlaylist(
   onProgress?.('Fetching tracks from Deezer…');
   const tracks = await deezer.fetchTracks(genre, decade);
 
+  if (tracks.length === 0) {
+    throw new Error(
+      'Could not fetch any tracks from Deezer. Check your internet connection — the dev server proxies requests to api.deezer.com.',
+    );
+  }
+
   const pool: PoolTrack[] = tracks.map(t => ({
     id: t.id,
     name: t.name,
