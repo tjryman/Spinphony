@@ -7,7 +7,7 @@ import {
 import type { GenreOption } from '../types';
 
 const CLIENT_ID = '2a82a87ad0d74e61b4fc554ddabbfae6';
-export const REDIRECT_URI = 'https://localhost:5173/';
+export const REDIRECT_URI = 'https://localhost:5173';
 const SCOPES = [
   'playlist-modify-public',
   'playlist-modify-private',
