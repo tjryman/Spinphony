@@ -9,6 +9,7 @@ import type {
 import * as spotify from './spotify';
 import type { Track as SpotifySDKTrack, AudioFeatures } from './spotify';
 import * as appleMusic from './appleMusic';
+import * as deezer from './deezer';
 
 // ─── Spin class structure ─────────────────────────────────────────────────────
 
@@ -228,6 +229,51 @@ export async function buildSpotifyPlaylist(
     onProgress?.('Using genre BPM profile…');
     pool = assignHeuristicBpms(allTracks, genre, countMap);
   }
+
+  onProgress?.('Building spin class structure…');
+  const structure = getClassStructure(durationMinutes, coolDown);
+  const used = new Set<string>();
+  const segments: Segment[] = [];
+
+  for (const { type, count } of structure) {
+    const bpmRange = segmentBpmRange(type, selectedBpm);
+    const picked = pickTracks(pool, bpmRange, count, used);
+    segments.push({ type, bpmRange, tracks: picked.map(t => poolTrackToTrack(t, type)) });
+  }
+
+  onProgress?.('Fine-tuning playlist length…');
+  adjustDuration(segments, durationMinutes * 60_000, pool, used);
+
+  return {
+    segments,
+    totalDurationMs: segments.reduce((s, seg) => s + seg.tracks.reduce((ss, t) => ss + t.durationMs, 0), 0),
+    config,
+  };
+}
+
+// ─── Deezer playlist builder (free, no account needed) ───────────────────────
+
+export async function buildDeezerPlaylist(
+  config: PlaylistConfig,
+  onProgress?: (msg: string) => void,
+): Promise<GeneratedPlaylist> {
+  const { bpm: selectedBpm, genre, decade, durationMinutes, coolDown } = config;
+
+  onProgress?.('Fetching tracks from Deezer…');
+  const tracks = await deezer.fetchTracks(genre, decade);
+
+  const pool: PoolTrack[] = tracks.map(t => ({
+    id: t.id,
+    name: t.name,
+    uri: `deezer:track:${t.id}`,
+    duration_ms: t.durationMs,
+    artists: [{ name: t.artist }],
+    album: { name: t.album, images: t.imageUrl ? [{ url: t.imageUrl }] : [] },
+    preview_url: t.previewUrl ?? null,
+    popularity: t.popularity,
+    bpm: t.bpm,
+    appearanceCount: 1,
+  }));
 
   onProgress?.('Building spin class structure…');
   const structure = getClassStructure(durationMinutes, coolDown);

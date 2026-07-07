@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Save, CheckCircle, AlertCircle, Clock, Music2, RefreshCw } from 'lucide-react';
+import { Save, CheckCircle, AlertCircle, Clock, Music2, RefreshCw, Copy, Check } from 'lucide-react';
 import type { GeneratedPlaylist } from '../types';
 import TrackCard from './TrackCard';
 import SegmentLabel from './SegmentLabel';
@@ -17,16 +17,25 @@ type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 export default function PlaylistDisplay({ playlist, onRegenerate }: Props) {
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [saveError, setSaveError] = useState('');
+  const [copied, setCopied] = useState(false);
 
   const { segments, totalDurationMs, config } = playlist;
   const allTracks = segments.flatMap(s => s.tracks);
   const trackCount = allTracks.length;
   const isSpotify = config.platform === 'spotify';
+  const isDeezer = config.platform === 'deezer';
 
   const targetMin = config.durationMinutes;
   const actualMin = Math.round(totalDurationMs / 60_000);
   const diff = Math.abs(actualMin - targetMin);
   const withinTarget = diff <= 2;
+
+  function handleCopyList() {
+    const lines = allTracks.map((t, i) => `${i + 1}. ${t.name} — ${t.artist} (${t.bpm} BPM)`);
+    navigator.clipboard.writeText(lines.join('\n'));
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
 
   async function handleSave() {
     setSaveState('saving');
@@ -125,7 +134,7 @@ export default function PlaylistDisplay({ playlist, onRegenerate }: Props) {
         })}
       </div>
 
-      {/* Save button */}
+      {/* Save / copy button */}
       <div className="sticky bottom-4 mt-2">
         {saveState === 'error' && (
           <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/30 rounded-xl p-3 mb-2">
@@ -133,27 +142,37 @@ export default function PlaylistDisplay({ playlist, onRegenerate }: Props) {
             <p className="text-red-300 text-xs">{saveError}</p>
           </div>
         )}
-        <button
-          onClick={handleSave}
-          disabled={saveState === 'saving' || saveState === 'saved'}
-          className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold text-sm transition-all shadow-xl ${
-            saveState === 'saved'
-              ? 'bg-green-600 text-white cursor-default'
-              : saveState === 'saving'
-              ? 'bg-spin-accent/60 text-white cursor-not-allowed'
-              : isSpotify
-              ? 'bg-[#1DB954] hover:bg-[#1ed760] text-black active:scale-[0.98] shadow-[#1DB954]/30'
-              : 'bg-pink-500 hover:bg-pink-400 text-white active:scale-[0.98] shadow-pink-500/30'
-          }`}
-        >
-          {saveState === 'saved' ? (
-            <><CheckCircle size={16} /> Saved to {isSpotify ? 'Spotify' : 'Apple Music'}!</>
-          ) : saveState === 'saving' ? (
-            <><Save size={16} className="animate-pulse" /> Saving…</>
-          ) : (
-            <><Save size={16} /> Save to {isSpotify ? 'Spotify' : 'Apple Music'}</>
-          )}
-        </button>
+
+        {isDeezer ? (
+          <button
+            onClick={handleCopyList}
+            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold text-sm transition-all shadow-xl bg-emerald-600 hover:bg-emerald-500 text-white active:scale-[0.98] shadow-emerald-500/30"
+          >
+            {copied ? <><Check size={16} /> Copied!</> : <><Copy size={16} /> Copy Track List</>}
+          </button>
+        ) : (
+          <button
+            onClick={handleSave}
+            disabled={saveState === 'saving' || saveState === 'saved'}
+            className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold text-sm transition-all shadow-xl ${
+              saveState === 'saved'
+                ? 'bg-green-600 text-white cursor-default'
+                : saveState === 'saving'
+                ? 'bg-spin-accent/60 text-white cursor-not-allowed'
+                : isSpotify
+                ? 'bg-[#1DB954] hover:bg-[#1ed760] text-black active:scale-[0.98] shadow-[#1DB954]/30'
+                : 'bg-pink-500 hover:bg-pink-400 text-white active:scale-[0.98] shadow-pink-500/30'
+            }`}
+          >
+            {saveState === 'saved' ? (
+              <><CheckCircle size={16} /> Saved to {isSpotify ? 'Spotify' : 'Apple Music'}!</>
+            ) : saveState === 'saving' ? (
+              <><Save size={16} className="animate-pulse" /> Saving…</>
+            ) : (
+              <><Save size={16} /> Save to {isSpotify ? 'Spotify' : 'Apple Music'}</>
+            )}
+          </button>
+        )}
       </div>
     </div>
   );

@@ -59,6 +59,7 @@ export default function PlaylistForm({ platform, onGenerate, isGenerating, onDis
   const [coolDown, setCoolDown] = useState(false);
 
   const isSpotify = platform === 'spotify';
+  const isDeezer = platform === 'deezer';
 
   function handleGenre(g: GenreOption) {
     setGenre(g);
@@ -78,13 +79,13 @@ export default function PlaylistForm({ platform, onGenerate, isGenerating, onDis
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-5">
-      {/* Connected account */}
+      {/* Connected account / source badge */}
       <div className="flex items-center justify-between bg-spin-border/60 rounded-xl px-4 py-3">
         <div className="flex items-center gap-2">
-          <div className={`w-2 h-2 rounded-full animate-pulse ${isSpotify ? 'bg-[#1DB954]' : 'bg-pink-400'}`} />
+          <div className={`w-2 h-2 rounded-full animate-pulse ${isSpotify ? 'bg-[#1DB954]' : isDeezer ? 'bg-emerald-400' : 'bg-pink-400'}`} />
           <span className="text-sm text-gray-300">
-            {isSpotify ? 'Spotify' : 'Apple Music'}
-            {userDisplayName ? ` · ${userDisplayName}` : ''}
+            {isSpotify ? 'Spotify' : isDeezer ? 'Deezer' : 'Apple Music'}
+            {isDeezer ? ' · Free' : userDisplayName ? ` · ${userDisplayName}` : ''}
           </span>
         </div>
         <button
@@ -92,7 +93,7 @@ export default function PlaylistForm({ platform, onGenerate, isGenerating, onDis
           onClick={onDisconnect}
           className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
         >
-          Disconnect
+          {isDeezer ? 'Back' : 'Disconnect'}
         </button>
       </div>
 
@@ -205,8 +206,9 @@ export default function PlaylistForm({ platform, onGenerate, isGenerating, onDis
       </button>
 
       <p className="text-xs text-gray-600 text-center">
-        Scans top {isSpotify ? 'Spotify' : 'Apple Music'} charts + search results.
-        Songs appearing in multiple charts are prioritised.
+        {isDeezer
+          ? 'Searches Deezer charts + catalog with real BPM data. No account needed.'
+          : `Scans top ${isSpotify ? 'Spotify' : 'Apple Music'} charts + search results. Songs in multiple charts are prioritised.`}
       </p>
     </form>
   );

@@ -25,7 +25,7 @@ export type DecadeOption = '70s' | '80s' | '90s' | '2000s' | '2010s' | '2020s';
 
 export type PlaylistLength = 30 | 45 | 60;
 
-export type Platform = 'spotify' | 'apple-music';
+export type Platform = 'spotify' | 'apple-music' | 'deezer';
 
 export type SegmentType = 'warmup' | 'flat' | 'climb' | 'sprint' | 'recovery' | 'jump' | 'cooldown';
 
