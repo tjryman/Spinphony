@@ -6,3 +6,4 @@ dist
 .DS_Store
 localhost-key.pem
 localhost-cert.pem
+dist-single/
