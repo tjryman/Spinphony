@@ -18,6 +18,10 @@ export default function PlaylistDisplay({ playlist, onRegenerate }: Props) {
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [saveError, setSaveError] = useState('');
   const [copied, setCopied] = useState(false);
+  const [exportState, setExportState] = useState<SaveState>('idle');
+  const [exportProgress, setExportProgress] = useState('');
+  const [exportError, setExportError] = useState('');
+  const [exportSummary, setExportSummary] = useState('');
 
   const { segments, totalDurationMs, config, note } = playlist;
   const allTracks = segments.flatMap(s => s.tracks);
@@ -29,6 +33,38 @@ export default function PlaylistDisplay({ playlist, onRegenerate }: Props) {
   const actualMin = Math.round(totalDurationMs / 60_000);
   const diff = Math.abs(actualMin - targetMin);
   const withinTarget = diff <= 2;
+
+  async function handleExportToAppleMusic() {
+    setExportState('saving');
+    setExportError('');
+    setExportSummary('');
+
+    const genreLabel = config.genre === 'Decades' && config.decade
+      ? `${config.decade} ${config.genre}`
+      : config.genre;
+    const playlistName = `Spinphony · ${genreLabel} · ${config.bpm} BPM · ${config.durationMinutes}min`;
+    const description = `Auto-generated spin class playlist by Spinphony. ${config.durationMinutes}-min ${genreLabel} class at ${config.bpm} BPM.`;
+
+    try {
+      const result = await appleMusicService.exportPlaylist(
+        playlistName,
+        description,
+        allTracks.map(t => ({ name: t.name, artist: t.artist, durationMs: t.durationMs })),
+        setExportProgress,
+      );
+      setExportState('saved');
+      setExportSummary(
+        result.skipped.length === 0
+          ? `All ${result.added} tracks added to Apple Music in order.`
+          : `${result.added} of ${result.total} tracks added in order. Not found on Apple Music: ${result.skipped.join('; ')}`,
+      );
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : 'Export failed');
+      setExportState('error');
+    } finally {
+      setExportProgress('');
+    }
+  }
 
   function handleCopyList() {
     const lines = allTracks.map((t, i) => `${i + 1}. ${t.name} — ${t.artist} (${t.bpm} BPM)`);
@@ -151,12 +187,47 @@ export default function PlaylistDisplay({ playlist, onRegenerate }: Props) {
         )}
 
         {isDeezer ? (
-          <button
-            onClick={handleCopyList}
-            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold text-sm transition-all shadow-xl bg-emerald-600 hover:bg-emerald-500 text-white active:scale-[0.98] shadow-emerald-500/30"
-          >
-            {copied ? <><Check size={16} /> Copied!</> : <><Copy size={16} /> Copy Track List</>}
-          </button>
+          <div className="flex flex-col gap-2">
+            {exportState === 'error' && (
+              <div className="flex items-center gap-2 bg-red-950 border border-red-500/30 rounded-xl p-3 shadow-xl">
+                <AlertCircle size={14} className="text-red-400 shrink-0" />
+                <p className="text-red-300 text-xs">{exportError}</p>
+              </div>
+            )}
+            {exportSummary && (
+              <div className="flex items-center gap-2 bg-pink-950 border border-pink-500/30 rounded-xl p-3 shadow-xl">
+                <CheckCircle size={14} className="text-pink-400 shrink-0" />
+                <p className="text-pink-300 text-xs">{exportSummary}</p>
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                onClick={handleCopyList}
+                className="flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold text-sm transition-all shadow-xl bg-emerald-600 hover:bg-emerald-500 text-white active:scale-[0.98] shadow-emerald-500/30"
+              >
+                {copied ? <><Check size={16} /> Copied!</> : <><Copy size={16} /> Copy Track List</>}
+              </button>
+              <button
+                onClick={handleExportToAppleMusic}
+                disabled={exportState === 'saving' || exportState === 'saved'}
+                className={`flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold text-sm transition-all shadow-xl ${
+                  exportState === 'saved'
+                    ? 'bg-pink-700 text-white cursor-default'
+                    : exportState === 'saving'
+                    ? 'bg-pink-500/60 text-white cursor-not-allowed'
+                    : 'bg-pink-500 hover:bg-pink-400 text-white active:scale-[0.98] shadow-pink-500/30'
+                }`}
+              >
+                {exportState === 'saved' ? (
+                  <><CheckCircle size={16} /> Exported!</>
+                ) : exportState === 'saving' ? (
+                  <><Save size={16} className="animate-pulse" /> {exportProgress || 'Exporting…'}</>
+                ) : (
+                  <><Music2 size={16} /> Export to Apple Music</>
+                )}
+              </button>
+            </div>
+          </div>
         ) : (
           <button
             onClick={handleSave}
