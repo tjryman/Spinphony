@@ -200,7 +200,7 @@ export default function PlaylistDisplay({ playlist, onRegenerate }: Props) {
                 <p className="text-pink-300 text-xs">{exportSummary}</p>
               </div>
             )}
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <button
                 onClick={handleCopyList}
                 className="flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold text-sm transition-all shadow-xl bg-emerald-600 hover:bg-emerald-500 text-white active:scale-[0.98] shadow-emerald-500/30"

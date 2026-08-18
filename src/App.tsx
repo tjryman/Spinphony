@@ -235,7 +235,7 @@ export default function App() {
         {/* Builder + result */}
         {(appState === 'build' || appState === 'result') && (
           <div className="grid lg:grid-cols-[380px,1fr] gap-6 items-start">
-            <div className="bg-spin-card border border-spin-border rounded-2xl p-5 lg:sticky lg:top-24">
+            <div className="min-w-0 bg-spin-card border border-spin-border rounded-2xl p-5 lg:sticky lg:top-24">
               <PlaylistForm
                 platform={platform}
                 onGenerate={generate}
@@ -245,7 +245,7 @@ export default function App() {
               />
             </div>
 
-            <div className="bg-spin-card border border-spin-border rounded-2xl p-5 min-h-[400px]">
+            <div className="min-w-0 bg-spin-card border border-spin-border rounded-2xl p-5 min-h-[400px]">
               {isGenerating && <LoadingOverlay message={progress} />}
 
               {!isGenerating && error && (
