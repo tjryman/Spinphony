@@ -1,5 +1,6 @@
 import type { GenreOption } from '../types';
 import { GENRE_BPM_PROFILE } from './spotify';
+import { fetchDemoTracks } from './demoLibrary';
 
 // ─── Genre config ─────────────────────────────────────────────────────────────
 
@@ -59,6 +60,7 @@ export interface DeezerTrack {
   imageUrl?: string;
   previewUrl?: string;
   popularity: number;
+  demo?: boolean;
 }
 
 interface DeezerSearchItem {
@@ -148,7 +150,9 @@ export async function fetchTracks(genre: GenreOption, decade?: string): Promise<
     return true;
   });
 
-  if (unique.length === 0) return [];
+  // Deezer unreachable (offline, blocked egress, etc.) — fall back to the
+  // built-in demo library so the app stays fully testable.
+  if (unique.length === 0) return fetchDemoTracks(genre, decade);
 
   // Parallel BPM lookup — Deezer's /track/{id} endpoint includes real BPM data
   const bpms = await Promise.all(unique.map(t => fetchBpm(t.id)));

@@ -81,6 +81,7 @@ interface PoolTrack {
   preview_url?: string | null;
   popularity?: number;
   bpm: number;
+  bpmIsReal?: boolean;
   appearanceCount: number;
 }
 
@@ -119,6 +120,7 @@ function poolTrackToTrack(t: PoolTrack, type: SegmentType): Track {
     album: t.album.name,
     durationMs: t.duration_ms,
     bpm: t.bpm,
+    bpmIsReal: t.bpmIsReal,
     segmentType: type,
     imageUrl: t.album.images[1]?.url ?? t.album.images[0]?.url,
     previewUrl: t.preview_url ?? undefined,
@@ -278,8 +280,12 @@ export async function buildDeezerPlaylist(
     preview_url: t.previewUrl ?? null,
     popularity: t.popularity,
     bpm: t.bpm,
+    bpmIsReal: t.bpmIsReal,
     appearanceCount: 1,
   }));
+
+  const usingDemo = tracks.some(t => t.demo);
+  if (usingDemo) onProgress?.('Deezer unreachable — using built-in demo library…');
 
   onProgress?.('Building spin class structure…');
   const structure = getClassStructure(durationMinutes, coolDown);
@@ -299,6 +305,9 @@ export async function buildDeezerPlaylist(
     segments,
     totalDurationMs: segments.reduce((s, seg) => s + seg.tracks.reduce((ss, t) => ss + t.durationMs, 0), 0),
     config,
+    note: usingDemo
+      ? 'Deezer is unreachable from this network, so this playlist was built from the built-in demo library — every BPM shown is a real, documented tempo.'
+      : undefined,
   };
 }
 

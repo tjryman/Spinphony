@@ -38,10 +38,13 @@ export default function TrackCard({ track, index }: Props) {
         <p className="text-xs text-gray-500 truncate">{track.artist}</p>
       </div>
 
-      {/* BPM badge */}
-      <div className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-xs font-mono shrink-0 ${colors.bg} ${colors.text} ${colors.border}`}>
+      {/* BPM badge — "~" marks a genre-based estimate rather than measured data */}
+      <div
+        className={`flex items-center gap-1 px-2 py-1 rounded-lg border text-xs font-mono shrink-0 ${colors.bg} ${colors.text} ${colors.border}`}
+        title={track.bpmIsReal === false ? 'Estimated BPM (no measured tempo available)' : 'Measured BPM'}
+      >
         <BarChart2 size={10} />
-        {formatBpm(track.bpm)}
+        {formatBpm(track.bpm, track.bpmIsReal !== false)}
       </div>
 
       {/* Duration */}

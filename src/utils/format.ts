@@ -13,8 +13,8 @@ export function formatTotalDuration(ms: number): string {
   return `${minutes}m`;
 }
 
-export function formatBpm(bpm: number): string {
-  return `${Math.round(bpm)} BPM`;
+export function formatBpm(bpm: number, isReal = true): string {
+  return `${isReal ? '' : '~'}${Math.round(bpm)} BPM`;
 }
 
 export const SEGMENT_LABELS: Record<string, string> = {

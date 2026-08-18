@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Save, CheckCircle, AlertCircle, Clock, Music2, RefreshCw, Copy, Check } from 'lucide-react';
+import { Save, CheckCircle, AlertCircle, Clock, Music2, RefreshCw, Copy, Check, Info } from 'lucide-react';
 import type { GeneratedPlaylist } from '../types';
 import TrackCard from './TrackCard';
 import SegmentLabel from './SegmentLabel';
@@ -19,7 +19,7 @@ export default function PlaylistDisplay({ playlist, onRegenerate }: Props) {
   const [saveError, setSaveError] = useState('');
   const [copied, setCopied] = useState(false);
 
-  const { segments, totalDurationMs, config } = playlist;
+  const { segments, totalDurationMs, config, note } = playlist;
   const allTracks = segments.flatMap(s => s.tracks);
   const trackCount = allTracks.length;
   const isSpotify = config.platform === 'spotify';
@@ -93,6 +93,13 @@ export default function PlaylistDisplay({ playlist, onRegenerate }: Props) {
           Regenerate
         </button>
       </div>
+
+      {note && (
+        <div className="flex items-center gap-2 bg-sky-500/10 border border-sky-500/30 rounded-xl p-3">
+          <Info size={14} className="text-sky-400 shrink-0" />
+          <p className="text-sky-300 text-xs">{note}</p>
+        </div>
+      )}
 
       {/* Progress bar showing class structure */}
       <div className="flex rounded-full h-2 overflow-hidden gap-0.5">

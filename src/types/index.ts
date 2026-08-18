@@ -45,6 +45,8 @@ export interface Track {
   album: string;
   durationMs: number;
   bpm: number;
+  /** false = BPM is a genre-based estimate, not measured data */
+  bpmIsReal?: boolean;
   segmentType: SegmentType;
   imageUrl?: string;
   previewUrl?: string;
@@ -68,6 +70,8 @@ export interface GeneratedPlaylist {
   segments: Segment[];
   totalDurationMs: number;
   config: PlaylistConfig;
+  /** Informational banner, e.g. when the built-in demo library was used */
+  note?: string;
 }
 
 export interface SpotifyTokens {
